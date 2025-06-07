@@ -2,12 +2,16 @@ from http import HTTPStatus
 
 from jwt import decode
 
-from fastapi_zero.security import ALGORITHM, SECRET_KEY, create_access_token
+from fastapi_zero.security import create_access_token
 
 
-def test_deve_retornar_token():
+def test_deve_retornar_token(settings):
     token = create_access_token({'sub': 'teste@teste.com'})
-    decoded = decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    decoded = decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[settings.ALGORITHM],
+    )
     assert decoded['sub'] == 'teste@teste.com'
     assert decoded['exp'] is not None
 
