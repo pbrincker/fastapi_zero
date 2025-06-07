@@ -39,15 +39,20 @@ def test_deve_retornar_erro_quando_usuario_ja_existe(client, user):
     assert response.json() == {'detail': 'User or email already exists'}
 
 
-def test_deve_retornar_lista_de_usuarios_vazia(client):
-    response = client.get('/users')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json() == {'users': []}
+def test_nao_deve_retornar_lista_de_usuarios_sem_token(client):
+    response = client.get(
+        '/users',
+    )
+    assert response.status_code == HTTPStatus.UNAUTHORIZED
+    assert response.json() == {'detail': 'Not authenticated'}
 
 
-def test_deve_listar_usuarios(client, user):
+def test_deve_listar_usuarios(client, user, token):
     user_schema = UserPublic.model_validate(user).model_dump()
-    response = client.get('/users')
+    response = client.get(
+        '/users',
+        headers={'Authorization': f'Bearer {token}'},
+    )
     assert response.status_code == HTTPStatus.OK
     assert response.json() == {'users': [user_schema]}
 
@@ -65,9 +70,10 @@ def test_deve_retornar_erro_quando_usuario_nao_existe_ao_buscar(client):
     assert response.json() == {'detail': 'User not found'}
 
 
-def test_deve_atualizar_um_usuario(client, user):
+def test_deve_atualizar_um_usuario(client, user, token):
     response = client.put(
-        '/users/1',
+        f'/users/{user.id}',
+        headers={'Authorization': f'Bearer {token}'},
         json={
             'username': 'teste2',
             'email': 'teste2@teste.com',
@@ -82,31 +88,45 @@ def test_deve_atualizar_um_usuario(client, user):
     }
 
 
-def test_deve_retornar_erro_quando_usuario_nao_existe(client):
+def test_deve_retornar_erro_quando_usuario_nao_tem_permissao(client, token):
     response = client.put(
         '/users/2',
+        headers={'Authorization': f'Bearer {token}'},
         json={
             'username': 'teste2',
             'email': 'teste2@teste.com',
             'password': 'teste2',
         },
     )
-    assert response.status_code == HTTPStatus.NOT_FOUND
-    assert response.json() == {'detail': 'User not found'}
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert response.json() == {
+        'detail': 'You are not allowed to update this user',
+    }
 
 
-def test_deve_deletar_um_usuario(client, user):
-    response = client.delete('/users/1')
+def test_deve_deletar_um_usuario(client, user, token):
+    response = client.delete(
+        f'/users/{user.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
     assert response.status_code == HTTPStatus.NO_CONTENT
 
 
-def test_deve_retornar_erro_quando_usuario_nao_existe_ao_deletar(client):
-    response = client.delete('/users/2')
-    assert response.status_code == HTTPStatus.NOT_FOUND
-    assert response.json() == {'detail': 'User not found'}
+def test_deve_retornar_erro_quando_usuario_nao_existe_ao_deletar(
+    client,
+    token,
+):
+    response = client.delete(
+        '/users/2',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert response.json() == {
+        'detail': 'You are not allowed to delete this user',
+    }
 
 
-def test_deve_retornar_erro_quando_tiver_conflito(client, user):
+def test_deve_retornar_erro_quando_tiver_conflito(client, user, token):
     client.post(
         '/users',
         json={
@@ -116,7 +136,8 @@ def test_deve_retornar_erro_quando_tiver_conflito(client, user):
         },
     )
     response = client.put(
-        '/users/1',
+        f'/users/{user.id}',
+        headers={'Authorization': f'Bearer {token}'},
         json={
             'username': 'teste2',
             'email': 'teste2@teste.com',
@@ -125,3 +146,13 @@ def test_deve_retornar_erro_quando_tiver_conflito(client, user):
     )
     assert response.status_code == HTTPStatus.CONFLICT
     assert response.json() == {'detail': 'User or email already exists'}
+
+
+def test_deve_retornar_token(client, user):
+    response = client.post(
+        '/token',
+        data={'username': user.email, 'password': user.clean_password},
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()['token_type'] == 'Bearer'
+    assert response.json()['access_token'] is not None
